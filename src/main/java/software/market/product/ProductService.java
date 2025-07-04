@@ -40,35 +40,24 @@ public class ProductService {
 
 	public List<String> getSuggestions(String query) {
 		Query multiMatchQuery = MultiMatchQuery.of(m -> m
-			.query(query) // query "갤럭"
-			.type(TextQueryType.BoolPrefix) // Bool 여러 토큰들을 논리적으로 결, Prefix 마지막 단어는 접두어 검색.
-			.fields("name.auto_complete", "name.auto_complete.2gram", "name.auto_complete.3gram")
+			.query(query)
+			.type(TextQueryType.BoolPrefix)
+			.fields("name.auto_complete", "name.auto_complete._2gram", "name.auto_complete._3gram")
 		)._toQuery();
-
-		HighlightParameters highlightParameters = HighlightParameters.builder()
-			.withPreTags("<b>")
-			.withPostTags("</b>")
-			.build();
-		// name 필드를 하이라이트 처리해줌 .
-		Highlight highlight = new Highlight(highlightParameters,
-			List.of(new HighlightField("name")));
-		HighlightQuery highlightQuery = new HighlightQuery(highlight, ProductDocument.class);
 
 		NativeQuery nativeQuery = NativeQuery.builder()
 			.withQuery(multiMatchQuery)
-			.withHighlightQuery(highlightQuery) // 하이라이트 쿼리 추가 .
-			.withPageable(PageRequest.of(0, 5)) // 5개 가져오기 .
+			.withPageable(PageRequest.of(0, 5))
 			.build();
 
-		SearchHits<ProductDocument> searchHits = elasticsearchOperations.search(nativeQuery,
-			ProductDocument.class);
+		SearchHits<ProductDocument> searchHits =
+			elasticsearchOperations.search(nativeQuery, ProductDocument.class);
 
 		return searchHits.getSearchHits().stream()
 			.map(hit -> {
 				ProductDocument productDocument = hit.getContent();
 				return productDocument.getName();
-			})
-			.toList();
+			}).toList();
 	}
 
 	public List<ProductDocument> searchProducts(
@@ -79,14 +68,19 @@ public class ProductService {
 		int page,
 		int size
 	) {
+		// bool 쿼리에 must, filter, should 만들기, highlight 만들기.
+		// native 쿼리에 bool 쿼리 + highlight 담아서 elastic 쿼리에 요청해서 searchHit 가져오기 ..
+		// must
+		// fuzziness -> 이건 search 쿼리를 보낼때 사용한다 .
 		Query multiMatchQuery = MultiMatchQuery.of(m -> m
 			.query(query)
 			.fields("name^3", "description^1", "category^2") // 검색할 필드와 가중치.
 			.fuzziness("AUTO") // 오타 허용 ..
 		)._toQuery();
 
+		// filter 에는 카테고리를 위한 term query + price 를 위한 NumberRange query
 		ArrayList<Query> filters = new ArrayList<>();
-		if (category != null & !category.isEmpty()) {
+		if (category != null && !category.isEmpty()) {
 			Query categoryFilter = TermQuery.of(t -> t
 				.field("category.raw")
 				.value(category)
@@ -101,11 +95,13 @@ public class ProductService {
 		)._toRangeQuery()._toQuery();
 		filters.add(priceRangeFilter);
 
+		// should
 		Query ratingShould = NumberRangeQuery.of(b -> b
 			.field("rating")
 			.gt(4.0)
 		)._toRangeQuery()._toQuery();
 
+		// boolQuery 에 must filter should .. 담고
 		Query boolQuery = BoolQuery.of(b -> b
 			.must(multiMatchQuery)
 			.filter(filters)

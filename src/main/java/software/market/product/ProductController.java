@@ -40,10 +40,10 @@ public class ProductController {
 	public ResponseEntity<List<ProductDocument>> searchProducts(
 		@RequestParam("query") String query,
 		@RequestParam(value = "category", required = false) String category,
-		@RequestParam(value = "minPrice", required = false) double minPrice,
-		@RequestParam(value = "maxPrice", required = false) double maxPrice,
-		@RequestParam("page") int page,
-		@RequestParam("pageSize") int pageSize
+		@RequestParam(defaultValue = "1") Double minPrice,
+		@RequestParam(defaultValue = "1000000000", required = false) Double maxPrice,
+		@RequestParam(defaultValue = "1") int page,
+		@RequestParam(defaultValue = "10") int pageSize
 	) {
 		List<ProductDocument> productDocuments = productService.searchProducts(query, category,
 			minPrice, maxPrice, page, pageSize);
